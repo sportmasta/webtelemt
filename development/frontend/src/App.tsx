@@ -487,16 +487,9 @@ function Dashboard({
                         <td className="col-ips ips">
                           {(() => {
                             const ipList = user.active_unique_ips_list ?? [];
-                            const ipCount =
-                              user.active_unique_ips ?? (ipList.length > 0 ? ipList.length : 0);
-                            if (ipCount === 0) return "—";
+                            if (ipList.length === 0) return "—";
                             return (
-                              <span className="ips-cell">
-                                <strong className="ips-count">{ipCount}</strong>
-                                {ipList.length > 0 && (
-                                  <span className="ips-list">{ipList.join(", ")}</span>
-                                )}
-                              </span>
+                              <span className="ips-cell">{ipList.join(", ")}</span>
                             );
                           })()}
                         </td>

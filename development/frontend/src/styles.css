@@ -357,7 +357,9 @@ input:focus {
 }
 
 .table th.col-status,
-.table td.col-status {
+.table td.col-status,
+.table th.col-ips,
+.table td.col-ips {
   text-align: center;
 }
 
@@ -508,29 +510,14 @@ input:focus {
 }
 
 .ips-cell {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
+  display: inline-block;
   max-width: 100%;
-  min-width: 0;
-}
-
-.ips-count {
-  flex-shrink: 0;
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-
-.ips-list {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-muted);
-  font-size: 0.82rem;
-  font-weight: 400;
   font-family: var(--mono);
+  font-size: 0.82rem;
+  color: var(--text);
 }
 
 .tcp-sessions {
