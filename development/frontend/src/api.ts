@@ -138,6 +138,29 @@ export function getPrimaryConnectionLink(user: TelemtUser): string | null {
   return getConnectionLinks(user)[0] ?? null;
 }
 
+function userStatusLabel(user: TelemtUser): string {
+  if (user.status) return user.status;
+  if (user.enabled === false) return "отключён";
+  if (user.enabled === true) return "активен";
+  return "";
+}
+
+/** Фильтр по имени, IP и статусу (без учёта регистра). */
+export function filterUsers(users: TelemtUser[], query: string): TelemtUser[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return users;
+
+  return users.filter((user) => {
+    if (user.username.toLowerCase().includes(q)) return true;
+    const status = userStatusLabel(user).toLowerCase();
+    if (status && status.includes(q)) return true;
+    if ((user.active_unique_ips_list ?? []).some((ip) => ip.toLowerCase().includes(q))) {
+      return true;
+    }
+    return false;
+  });
+}
+
 export interface StatsSummary {
   uptime_seconds?: number;
   connections_total?: number;

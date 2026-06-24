@@ -1,4 +1,4 @@
-import { FormEvent, Fragment, useCallback, useEffect, useState } from "react";
+import { FormEvent, Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   ApiError,
@@ -7,6 +7,7 @@ import {
   aggregateLiveStats,
   api,
   clearToken,
+  filterUsers,
   getConnectionLinks,
   getPrimaryConnectionLink,
   getToken,
@@ -299,6 +300,7 @@ function Dashboard({
   const [showCreate, setShowCreate] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const [filterQuery, setFilterQuery] = useState("");
 
   const toggleUserRow = (username: string) => {
     setExpandedUser((current) => (current === username ? null : username));
@@ -330,6 +332,11 @@ function Dashboard({
   }, [refresh]);
 
   const liveStats = aggregateLiveStats(users);
+  const filteredUsers = useMemo(
+    () => filterUsers(users, filterQuery),
+    [users, filterQuery]
+  );
+  const hasFilter = filterQuery.trim().length > 0;
 
   return (
     <div className="page">
@@ -387,16 +394,52 @@ function Dashboard({
           </button>
         </div>
 
+        <div className="filter-bar">
+          <label className="filter-field">
+            <span className="filter-label">Фильтр</span>
+            <input
+              type="search"
+              className="filter-input"
+              placeholder="Имя, IP или статус…"
+              value={filterQuery}
+              onChange={(e) => setFilterQuery(e.target.value)}
+              aria-label="Фильтр клиентов"
+            />
+          </label>
+          {hasFilter && (
+            <>
+              <span className="filter-meta">
+                {filteredUsers.length} из {users.length}
+              </span>
+              <button
+                type="button"
+                className="btn btn--sm"
+                onClick={() => setFilterQuery("")}
+              >
+                Сбросить
+              </button>
+            </>
+          )}
+        </div>
+
         <div className="table-wrap">
           <table className="table">
+            <colgroup>
+              <col className="col-name" />
+              <col className="col-status" />
+              <col className="col-tcp" />
+              <col className="col-ips" />
+              <col className="col-traffic" />
+              <col className="col-actions" />
+            </colgroup>
             <thead>
               <tr>
-                <th>Имя</th>
-                <th>Статус</th>
-                <th>TCP-сессии</th>
-                <th>Активные IP</th>
-                <th>Трафик</th>
-                <th></th>
+                <th className="col-name">Имя</th>
+                <th className="col-status">Статус</th>
+                <th className="col-tcp">TCP</th>
+                <th className="col-ips">Активные IP</th>
+                <th className="col-traffic">Трафик</th>
+                <th className="col-actions" aria-label="Действия" />
               </tr>
             </thead>
             <tbody>
@@ -406,8 +449,14 @@ function Dashboard({
                     Нет клиентов
                   </td>
                 </tr>
+              ) : filteredUsers.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="empty">
+                    Ничего не найдено по фильтру «{filterQuery.trim()}»
+                  </td>
+                </tr>
               ) : (
-                users.map((user) => {
+                filteredUsers.map((user) => {
                   const isExpanded = expandedUser === user.username;
                   return (
                     <Fragment key={user.username}>
@@ -415,13 +464,15 @@ function Dashboard({
                         className={`table-row--clickable${isExpanded ? " table-row--expanded" : ""}`}
                         onClick={() => toggleUserRow(user.username)}
                       >
-                        <td className="mono user-name-cell">
-                          <span className="row-chevron" aria-hidden>
-                            {isExpanded ? "▾" : "▸"}
+                        <td className="col-name">
+                          <span className="user-name-cell mono">
+                            <span className="row-chevron" aria-hidden>
+                              {isExpanded ? "▾" : "▸"}
+                            </span>
+                            <span className="user-name-text">{user.username}</span>
                           </span>
-                          {user.username}
                         </td>
-                        <td>
+                        <td className="col-status">
                           <span
                             className={`badge ${
                               user.enabled !== false ? "badge--ok" : "badge--off"
@@ -430,8 +481,10 @@ function Dashboard({
                             {userStatus(user)}
                           </span>
                         </td>
-                        <td className="mono tcp-sessions">{user.current_connections ?? 0}</td>
-                        <td className="ips">
+                        <td className="col-tcp mono tcp-sessions">
+                          {user.current_connections ?? 0}
+                        </td>
+                        <td className="col-ips ips">
                           {(() => {
                             const ipList = user.active_unique_ips_list ?? [];
                             const ipCount =
@@ -447,14 +500,14 @@ function Dashboard({
                             );
                           })()}
                         </td>
-                        <td className="mono">
+                        <td className="col-traffic mono">
                           {formatBytes(
                             user.total_bytes ??
                               user.total_octets ??
                               (user.bytes_up ?? 0) + (user.bytes_down ?? 0)
                           )}
                         </td>
-                        <td>
+                        <td className="col-actions">
                           <button
                             type="button"
                             className="btn btn--danger btn--sm"

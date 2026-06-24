@@ -50,5 +50,11 @@
 ### Тесты
 - `test_create_user_sets_max_unique_ips`, `test_delete_user_calls_telemt_api`
 
+## 2026-06-24 — Фильтр клиентов
+
+### Frontend
+- Поле фильтра над таблицей: поиск по имени, IP, статусу
+- Счётчик «N из M», кнопка «Сбросить»
+
 ### Документация
 - `docs/handoff/02-dev-done.md` — отчёт разработчика
