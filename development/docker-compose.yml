@@ -1,0 +1,10 @@
+services:
+  webtelemt:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: webtelemt
+    network_mode: host
+    env_file:
+      - .env
+    restart: unless-stopped
