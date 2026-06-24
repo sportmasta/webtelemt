@@ -7,6 +7,7 @@ from fastapi import HTTPException, Request, status
 from app.config import Settings
 
 _attempts: dict[str, list[float]] = defaultdict(list)
+_billing_attempts: dict[str, list[float]] = defaultdict(list)
 _lock = Lock()
 
 
@@ -47,3 +48,28 @@ def record_failed_login(ip: str, settings: Settings) -> None:
 def clear_login_attempts(ip: str) -> None:
     with _lock:
         _attempts.pop(ip, None)
+
+
+def check_billing_rate_limit(ip: str, settings: Settings) -> None:
+    now = time.time()
+    window = settings.billing_order_rate_window_seconds
+    limit = settings.billing_order_rate_limit
+
+    with _lock:
+        recent = [t for t in _billing_attempts[ip] if now - t < window]
+        _billing_attempts[ip] = recent
+        if len(recent) >= limit:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Слишком много попыток создания заказа. Повторите позже.",
+            )
+
+
+def record_billing_attempt(ip: str, settings: Settings) -> None:
+    now = time.time()
+    window = settings.billing_order_rate_window_seconds
+
+    with _lock:
+        recent = [t for t in _billing_attempts[ip] if now - t < window]
+        recent.append(now)
+        _billing_attempts[ip] = recent

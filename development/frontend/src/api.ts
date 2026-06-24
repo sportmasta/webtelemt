@@ -226,4 +226,72 @@ export const api = {
       method: "DELETE",
     });
   },
+
+  billingPlan() {
+    return request<BillingPlan>("/api/billing/plan");
+  },
+
+  createBillingOrder(body: { username?: string; email?: string }) {
+    return request<CreateOrderResponse>("/api/billing/orders", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  getBillingOrder(orderId: string) {
+    return request<BillingOrderPublic>(`/api/billing/orders/${encodeURIComponent(orderId)}`);
+  },
+
+  getBillingCredentials(orderId: string) {
+    return request<BillingCredentials>(
+      `/api/billing/orders/${encodeURIComponent(orderId)}/credentials`
+    );
+  },
+
+  billingOrders() {
+    return request<BillingOrderAdmin[]>("/api/billing/orders");
+  },
 };
+
+export interface BillingPlan {
+  name: string;
+  price_rub: number;
+  period_days: number;
+}
+
+export interface CreateOrderResponse {
+  order_id: string;
+  confirmation_url: string;
+}
+
+export interface BillingOrderPublic {
+  id: string;
+  status: string;
+  amount_kopecks: number;
+  currency: string;
+  username_issued: string | null;
+  credentials_available: boolean;
+  created_at: string;
+  paid_at: string | null;
+  completed_at: string | null;
+}
+
+export interface BillingCredentials {
+  username: string;
+  secret: string;
+}
+
+export interface BillingOrderAdmin {
+  id: string;
+  status: string;
+  amount_kopecks: number;
+  currency: string;
+  username_requested: string | null;
+  username_issued: string | null;
+  customer_email: string | null;
+  credentials_viewed: boolean;
+  created_at: string;
+  paid_at: string | null;
+  completed_at: string | null;
+  error_message: string | null;
+}

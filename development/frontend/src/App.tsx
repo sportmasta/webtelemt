@@ -1,7 +1,9 @@
 import { FormEvent, Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import {
   ApiError,
+  BillingOrderAdmin,
   StatsSummary,
   TelemtUser,
   aggregateLiveStats,
@@ -13,8 +15,11 @@ import {
   getToken,
   setToken,
 } from "./api";
+import BuyFailPage from "./pages/BuyFailPage";
+import BuyPage from "./pages/BuyPage";
+import BuySuccessPage from "./pages/BuySuccessPage";
 
-type View = "loading" | "login" | "dashboard";
+type AdminView = "clients" | "orders";
 
 function formatBytes(bytes: number | undefined): string {
   if (bytes === undefined || bytes === null) return "—";
@@ -287,6 +292,99 @@ function DeleteConfirmModal({
   );
 }
 
+function orderStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    pending: "ожидает оплаты",
+    paid: "оплачен",
+    completed: "выдан",
+    failed: "ошибка",
+    expired: "истёк",
+  };
+  return labels[status] ?? status;
+}
+
+function formatRub(kopecks: number): string {
+  return `${(kopecks / 100).toFixed(0)} ₽`;
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("ru-RU");
+}
+
+function OrdersSection() {
+  const [orders, setOrders] = useState<BillingOrderAdmin[]>([]);
+  const [error, setError] = useState("");
+
+  const refresh = useCallback(async () => {
+    try {
+      const data = await api.billingOrders();
+      setOrders(data);
+      setError("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Ошибка загрузки заказов");
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    const id = setInterval(refresh, 10000);
+    return () => clearInterval(id);
+  }, [refresh]);
+
+  return (
+    <section className="section">
+      <div className="section-header">
+        <h2>Заказы</h2>
+      </div>
+      {error && <p className="banner banner--error">{error}</p>}
+      <div className="table-wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Дата</th>
+              <th>Сумма</th>
+              <th>Статус</th>
+              <th>Username</th>
+              <th>Email</th>
+              <th>Выдан</th>
+            </tr>
+          </thead>
+          <tbody>
+            {orders.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="empty">
+                  Нет заказов
+                </td>
+              </tr>
+            ) : (
+              orders.map((order) => (
+                <tr key={order.id}>
+                  <td className="mono" title={order.id}>
+                    {order.id.slice(0, 8)}…
+                  </td>
+                  <td>{formatDate(order.created_at)}</td>
+                  <td className="mono">{formatRub(order.amount_kopecks)}</td>
+                  <td>
+                    <span className={`badge badge--order badge--${order.status}`}>
+                      {orderStatusLabel(order.status)}
+                    </span>
+                  </td>
+                  <td className="mono">{order.username_issued ?? order.username_requested ?? "—"}</td>
+                  <td>{order.customer_email ?? "—"}</td>
+                  <td>{order.credentials_viewed ? "да" : "нет"}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+      <p className="hint hint--right">Секреты покупателям не отображаются · обновление каждые 10 с</p>
+    </section>
+  );
+}
+
 function Dashboard({
   panelUser,
   onLogout,
@@ -301,6 +399,7 @@ function Dashboard({
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [filterQuery, setFilterQuery] = useState("");
+  const [adminView, setAdminView] = useState<AdminView>("clients");
 
   const toggleUserRow = (username: string) => {
     setExpandedUser((current) => (current === username ? null : username));
@@ -346,6 +445,9 @@ function Dashboard({
           <p className="subtitle">Панель управления</p>
         </div>
         <div className="header-actions">
+          <a href="/buy" className="btn btn--sm">
+            Покупка
+          </a>
           <span className="user-badge">{panelUser}</span>
           <button type="button" className="btn" onClick={onLogout}>
             Выйти
@@ -355,7 +457,7 @@ function Dashboard({
 
       {error && <p className="banner banner--error">{error}</p>}
 
-      {(stats || users.length > 0) && (
+      {(stats || users.length > 0) && adminView === "clients" && (
         <section className="stats-grid">
           <div className="stat-card">
             <span className="stat-label">Клиентов в конфиге</span>
@@ -382,6 +484,26 @@ function Dashboard({
         </section>
       )}
 
+      <div className="admin-tabs">
+        <button
+          type="button"
+          className={`admin-tab${adminView === "clients" ? " admin-tab--active" : ""}`}
+          onClick={() => setAdminView("clients")}
+        >
+          Клиенты
+        </button>
+        <button
+          type="button"
+          className={`admin-tab${adminView === "orders" ? " admin-tab--active" : ""}`}
+          onClick={() => setAdminView("orders")}
+        >
+          Заказы
+        </button>
+      </div>
+
+      {adminView === "orders" ? (
+        <OrdersSection />
+      ) : (
       <section className="section">
         <div className="section-header">
           <h2>Клиенты</h2>
@@ -531,6 +653,7 @@ function Dashboard({
           Обновление каждые 5 с · TCP-сессии ≠ устройства · нажмите на строку для ссылки
         </p>
       </section>
+      )}
 
       {showCreate && (
         <CreateUserModal
@@ -553,8 +676,25 @@ function Dashboard({
 }
 
 export default function App() {
-  const [view, setView] = useState<View>("loading");
+  const location = useLocation();
+
+  if (location.pathname.startsWith("/buy")) {
+    return (
+      <Routes>
+        <Route path="/buy" element={<BuyPage />} />
+        <Route path="/buy/success" element={<BuySuccessPage />} />
+        <Route path="/buy/fail" element={<BuyFailPage />} />
+      </Routes>
+    );
+  }
+
+  return <AdminApp />;
+}
+
+function AdminApp() {
+  const [view, setView] = useState<"loading" | "login" | "dashboard">("loading");
   const [panelUser, setPanelUser] = useState("");
+  const navigate = useNavigate();
 
   const checkAuth = useCallback(async () => {
     const token = getToken();
@@ -580,6 +720,7 @@ export default function App() {
     clearToken();
     setPanelUser("");
     setView("login");
+    navigate("/");
   }
 
   if (view === "loading") {

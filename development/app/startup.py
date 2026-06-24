@@ -21,3 +21,8 @@ def validate_settings(settings: Settings) -> None:
 
     if not settings.panel_admin_password:
         raise RuntimeError("PANEL_ADMIN_PASSWORD обязателен в production")
+
+    if settings.database_url and not settings.billing_credentials_encryption_key:
+        raise RuntimeError(
+            "BILLING_CREDENTIALS_ENCRYPTION_KEY обязателен при включённом DATABASE_URL"
+        )

@@ -16,6 +16,8 @@ from app.auth import (
     get_current_user,
     verify_credentials,
 )
+from app.billing.database import close_database, init_database, run_migrations
+from app.billing.router import router as billing_router
 from app.config import Settings, get_settings
 from app.middleware import SecurityHeadersMiddleware
 from app.rate_limit import check_login_rate_limit, clear_login_attempts, client_ip, record_failed_login
@@ -57,7 +59,7 @@ def _mount_static(app: FastAPI, settings: Settings) -> None:
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    fastapi_kwargs: dict[str, Any] = {"title": "WebTelemt", "version": "0.1.0"}
+    fastapi_kwargs: dict[str, Any] = {"title": "WebTelemt", "version": "0.2.0"}
 
     if settings.is_production:
         fastapi_kwargs["docs_url"] = None
@@ -67,7 +69,12 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         validate_settings(settings)
+        if settings.database_url:
+            init_database(settings.database_url)
+            await run_migrations()
         yield
+        if settings.database_url:
+            await close_database()
 
     app = FastAPI(**fastapi_kwargs, lifespan=lifespan)
 
@@ -152,6 +159,7 @@ def create_app() -> FastAPI:
     ) -> Any:
         return await client.delete(f"/v1/users/{username}")
 
+    app.include_router(billing_router)
     _mount_static(app, settings)
     return app
 

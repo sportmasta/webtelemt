@@ -1,4 +1,22 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: webtelemt-postgres
+    environment:
+      POSTGRES_USER: webtelemt
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-webtelemt}
+      POSTGRES_DB: webtelemt
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webtelemt"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   webtelemt:
     build:
       context: .
@@ -7,4 +25,10 @@ services:
     network_mode: host
     env_file:
       - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  postgres_data:

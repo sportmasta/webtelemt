@@ -24,6 +24,18 @@ class Settings(BaseSettings):
     login_rate_window_seconds: int = 900
     security_hsts: bool = False
 
+    database_url: str = ""
+    yookassa_shop_id: str = ""
+    yookassa_secret_key: str = ""
+    yookassa_return_url: str = ""
+    billing_plan_name: str = "Базовый"
+    billing_plan_price_rub: int = 299
+    billing_plan_period_days: int = 30
+    billing_order_ttl_minutes: int = 60
+    billing_credentials_encryption_key: str = ""
+    billing_order_rate_limit: int = 5
+    billing_order_rate_window_seconds: int = 900
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, value: object) -> str:
@@ -40,6 +52,16 @@ class Settings(BaseSettings):
         if not self.cors_origins:
             return []
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def billing_enabled(self) -> bool:
+        return bool(
+            self.database_url
+            and self.yookassa_shop_id
+            and self.yookassa_secret_key
+            and self.yookassa_return_url
+            and self.billing_credentials_encryption_key
+        )
 
 
 @lru_cache

@@ -63,11 +63,30 @@
 ### Тесты
 - `tests/test_security.py`
 
-## 2026-06-24 — Фильтр клиентов
+## 2026-06-24 — Биллинг (фаза 2)
+
+### Backend
+- PostgreSQL: модели `orders`, `order_secrets`, SQL-миграция `migrations/001_orders.sql`
+- Модуль `app/billing/`: ЮKassa-клиент, Fernet-шифрование secret, webhook `payment.succeeded`
+- API: `/api/billing/plan`, `orders`, `orders/{id}`, `credentials`, webhook, admin list
+- Rate limit на создание заказов, идемпотентный webhook
+- Переменные: `DATABASE_URL`, `YOOKASSA_*`, `BILLING_*`
+
+### Docker
+- Сервис `postgres` в `docker-compose.yml` (порт `127.0.0.1:5432`)
+- `webtelemt` сохраняет `network_mode: host`
 
 ### Frontend
-- Поле фильтра над таблицей: поиск по имени, IP, статусу
-- Счётчик «N из M», кнопка «Сбросить»
+- Страницы `/buy`, `/buy/success`, `/buy/fail` (react-router-dom)
+- Вкладка «Заказы» в админ-панели
+
+### Установка
+- `install.sh`: генерация `DATABASE_URL`, `BILLING_CREDENTIALS_ENCRYPTION_KEY`, подсказки ЮKassa
+- `--purge-postgres` при uninstall
+
+### Тесты
+- `tests/test_billing.py` с `MockYooKassaClient`
 
 ### Документация
-- `docs/handoff/02-dev-done.md` — отчёт разработчика
+- `README.md` — биллинг, PostgreSQL, webhook ЮKassa, env
+- `docs/handoff/DOCS.md` — руководство для покупателя и администратора

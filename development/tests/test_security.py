@@ -14,8 +14,9 @@ def test_docs_disabled_in_production(client: TestClient) -> None:
 
 
 def test_security_headers_present(client: TestClient) -> None:
-    response = client.get("/")
-    assert response.status_code == 200
+    # Use API route: static SPA is not built in pytest env (GET / → 404).
+    response = client.get("/api/auth/me")
+    assert response.status_code == 401
     assert response.headers.get("X-Frame-Options") == "DENY"
     assert response.headers.get("X-Content-Type-Options") == "nosniff"
     assert "Content-Security-Policy" in response.headers

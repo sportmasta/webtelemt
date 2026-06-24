@@ -7,6 +7,7 @@ ENV_FILE="${DEV_DIR}/.env"
 COMPOSE_FILE="${DEV_DIR}/docker-compose.yml"
 
 PURGE_ENV=0
+PURGE_POSTGRES=0
 UNINSTALL=0
 PANEL_PORT="${PANEL_PORT:-8080}"
 PANEL_ADMIN_USER="${PANEL_ADMIN_USER:-admin}"
@@ -25,6 +26,7 @@ WebTelemt — установка панели управления Telemt
   ./install.sh --non-interactive   Без запросов (нужен --password)
   ./install.sh --uninstall         Остановить и удалить контейнеры
   ./install.sh --uninstall --purge Удалить также .env
+  ./install.sh --uninstall --purge-postgres  Удалить volume PostgreSQL
 
 Переменные окружения: PANEL_PORT, PANEL_ADMIN_USER, PANEL_ADMIN_PASSWORD
 EOF
@@ -68,6 +70,24 @@ generate_secret() {
   fi
 }
 
+generate_fernet_key() {
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+  elif command -v python >/dev/null 2>&1; then
+    python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+  else
+    err "Для генерации BILLING_CREDENTIALS_ENCRYPTION_KEY нужен python3 с пакетом cryptography"
+  fi
+}
+
+generate_postgres_password() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 16
+  else
+    head -c 16 /dev/urandom | xxd -p -c 32
+  fi
+}
+
 prompt_password() {
   if [[ -n "$PANEL_ADMIN_PASSWORD" ]]; then
     return
@@ -83,8 +103,11 @@ prompt_password() {
 }
 
 write_env() {
-  local jwt_secret
+  local jwt_secret postgres_password fernet_key panel_ip
   jwt_secret="$(generate_secret)"
+  postgres_password="$(generate_postgres_password)"
+  fernet_key="$(generate_fernet_key)"
+  panel_ip="$(server_ip)"
   cat >"$ENV_FILE" <<EOF
 TELEMT_API_URL=http://127.0.0.1:9091
 PANEL_ADMIN_USER=${PANEL_ADMIN_USER}
@@ -95,9 +118,22 @@ PANEL_ENV=production
 LOGIN_RATE_LIMIT=5
 LOGIN_RATE_WINDOW_SECONDS=900
 USER_MAX_UNIQUE_IPS=1
+POSTGRES_PASSWORD=${postgres_password}
+DATABASE_URL=postgresql+asyncpg://webtelemt:${postgres_password}@127.0.0.1:5432/webtelemt
+BILLING_CREDENTIALS_ENCRYPTION_KEY=${fernet_key}
+BILLING_PLAN_NAME=Базовый
+BILLING_PLAN_PRICE_RUB=299
+BILLING_PLAN_PERIOD_DAYS=30
+BILLING_ORDER_TTL_MINUTES=60
+BILLING_ORDER_RATE_LIMIT=5
+BILLING_ORDER_RATE_WINDOW_SECONDS=900
+YOOKASSA_RETURN_URL=http://${panel_ip}:${PANEL_PORT}
+YOOKASSA_SHOP_ID=
+YOOKASSA_SECRET_KEY=
 EOF
   chmod 600 "$ENV_FILE"
   log "Создан ${ENV_FILE}"
+  log "Настройте ЮKassa: YOOKASSA_SHOP_ID и YOOKASSA_SECRET_KEY в ${ENV_FILE}"
 }
 
 install_panel() {
@@ -139,6 +175,8 @@ install_panel() {
   log "Панель установлена и запущена."
   echo "  URL:  http://${ip}:${port}"
   echo "  Логин: ${PANEL_ADMIN_USER}"
+  echo "  Покупка: http://${ip}:${port}/buy"
+  echo "  ЮKassa: укажите YOOKASSA_SHOP_ID и YOOKASSA_SECRET_KEY в ${ENV_FILE}"
   echo "  Логи: docker compose -f ${COMPOSE_FILE} --project-directory ${DEV_DIR} logs -f"
 }
 
@@ -146,9 +184,14 @@ uninstall_panel() {
   require_docker
   if [[ -f "$COMPOSE_FILE" ]]; then
     log "Остановка контейнеров…"
-    docker compose -f "$COMPOSE_FILE" --project-directory "$DEV_DIR" down --rmi local -v 2>/dev/null || \
+    if [[ "$PURGE_POSTGRES" -eq 1 ]]; then
+      docker compose -f "$COMPOSE_FILE" --project-directory "$DEV_DIR" down --rmi local -v 2>/dev/null || \
+        docker compose -f "$COMPOSE_FILE" --project-directory "$DEV_DIR" down -v 2>/dev/null || \
+        docker compose -f "$COMPOSE_FILE" --project-directory "$DEV_DIR" down
+    else
       docker compose -f "$COMPOSE_FILE" --project-directory "$DEV_DIR" down --rmi local 2>/dev/null || \
-      docker compose -f "$COMPOSE_FILE" --project-directory "$DEV_DIR" down
+        docker compose -f "$COMPOSE_FILE" --project-directory "$DEV_DIR" down
+    fi
   fi
   if [[ "$PURGE_ENV" -eq 1 && -f "$ENV_FILE" ]]; then
     rm -f "$ENV_FILE"
@@ -165,6 +208,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --purge)
       PURGE_ENV=1
+      shift
+      ;;
+    --purge-postgres)
+      PURGE_POSTGRES=1
       shift
       ;;
     --port)
