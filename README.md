@@ -12,6 +12,7 @@
 - Публичная покупка профиля через ЮKassa (`/buy`) — разовая оплата, автоматическое создание клиента Telemt
 - Однократная выдача secret покупателю после оплаты
 - Список заказов в админ-панели (без secret)
+- Личный кабинет покупателя (`/account`) — регистрация, история заказов, ссылки подключения без secret
 
 ## Требования
 
@@ -57,6 +58,15 @@ cd development && docker compose up -d
 
 - **Покупка:** `http://<IP-сервера>:8080/buy`
 - **Успех / ошибка:** `/buy/success?order_id=...`, `/buy/fail`
+
+### Личный кабинет покупателя
+
+- **Кабинет:** `http://<IP-сервера>:8080/account`
+- **Регистрация / вход:** `/account/register`, `/account/login`
+- Покупатель видит свои заказы и live-статистику Telemt; secret повторно не выдаётся
+- Заказы привязываются при покупке (если залогинен) или по email при регистрации
+
+Подробнее: [`docs/handoff/DOCS.md`](docs/handoff/DOCS.md).
 
 ### Webhook ЮKassa
 
@@ -153,7 +163,12 @@ Backend принимает запросы на `/api/*`, проверяет JWT 
 | `GET` | `/api/stats/summary` | JWT | Сводка статистики |
 | `GET` | `/api/health` | — | Прокси health Telemt |
 | `GET` | `/api/billing/plan` | — | Публичный тариф |
-| `POST` | `/api/billing/orders` | — (rate limit) | Создать заказ, получить `confirmation_url` |
+| `POST` | `/api/account/register` | — | Регистрация покупателя |
+| `POST` | `/api/account/login` | — | Вход покупателя |
+| `GET` | `/api/account/me` | customer JWT | Профиль покупателя |
+| `GET` | `/api/account/orders` | customer JWT | Заказы покупателя |
+| `GET` | `/api/account/profiles` | customer JWT | Профили + Telemt (без secret) |
+| `POST` | `/api/billing/orders` | — (опционально customer JWT, rate limit) | Создать заказ, получить `confirmation_url` |
 | `GET` | `/api/billing/orders/{id}` | — | Статус заказа |
 | `GET` | `/api/billing/orders/{id}/credentials` | — | Однократная выдача username + secret |
 | `POST` | `/api/billing/webhook/yookassa` | проверка через API ЮKassa | Webhook оплаты |

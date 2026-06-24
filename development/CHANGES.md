@@ -90,3 +90,27 @@
 ### Документация
 - `README.md` — биллинг, PostgreSQL, webhook ЮKassa, env
 - `docs/handoff/DOCS.md` — руководство для покупателя и администратора
+
+## 2026-06-24 — Личный кабинет покупателя (фаза 3)
+
+### Backend
+- Таблица `customers`, миграция `002_customers.sql`, FK `orders.customer_id`
+- Модуль `app/account/`: register, login, me, orders, profiles
+- JWT customer (`role: customer`) отдельно от admin; `get_current_admin` / `get_current_customer`
+- Пароли: Argon2 через `pwdlib`
+- `POST /api/billing/orders`: опциональный customer JWT, email обязателен без входа
+- Привязка старых заказов по `customer_email` при register/login
+
+### Frontend
+- `/account`, `/account/login`, `/account/register`
+- `customer_token` в localStorage (отдельно от admin `webtelemt_token`)
+- Кабинет: профили Telemt (polling 10 с), история заказов, QR/ссылки без secret
+- `/buy`: email обязателен или readonly при входе; `/buy/success`: CTA кабинета
+- Shared `components/ConnectionLinks.tsx`
+
+### Тесты
+- `tests/test_account.py` (8 тестов)
+- Обновлён `tests/test_billing.py` (email в заказах)
+
+### Документация
+- `docs/handoff/DEV.md` — auth model, пароли, привязка заказов

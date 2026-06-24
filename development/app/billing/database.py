@@ -42,11 +42,12 @@ async def run_migrations() -> None:
     if dialect == "sqlite":
         await create_tables()
         return
-    migration_file = Path(__file__).resolve().parent.parent.parent / "migrations" / "001_orders.sql"
-    sql = migration_file.read_text(encoding="utf-8")
+    migrations_dir = Path(__file__).resolve().parent.parent.parent / "migrations"
     async with _engine.begin() as conn:
-        for statement in _split_sql(sql):
-            await conn.exec_driver_sql(statement)
+        for migration_file in sorted(migrations_dir.glob("*.sql")):
+            sql = migration_file.read_text(encoding="utf-8")
+            for statement in _split_sql(sql):
+                await conn.exec_driver_sql(statement)
 
 
 def _split_sql(sql: str) -> list[str]:

@@ -1,148 +1,149 @@
-# Отчёт разработчика — биллинг WebTelemt (фаза 2)
+# Отчёт разработчика — WebTelemt
 
-## Сводка
+## Фаза 3 — личный кабинет покупателя (2026-06-24)
 
-Реализован MVP биллинга: публичная покупка тарифа через ЮKassa, автоматическое создание профиля Telemt после оплаты, однократная выдача secret покупателю, хранение заказов в PostgreSQL, список заказов в админ-панели.
+### Сводка
 
-## Изменённые и новые файлы
+Личный кабинет покупателя, связанный с биллингом: регистрация/вход по email+пароль, JWT customer, история заказов, live-профили Telemt (без secret), привязка заказов к аккаунту при покупке и постфактум по email.
 
-### Backend
+### Изменённые и новые файлы
+
+#### Backend
 | Путь | Назначение |
 |------|------------|
-| `development/app/billing/` | Модуль биллинга (models, database, service, router, yookassa, crypto, deps, schemas) |
-| `development/app/config.py` | Переменные биллинга и `billing_enabled` |
-| `development/app/main.py` | Lifespan БД, подключение billing router |
-| `development/app/rate_limit.py` | Rate limit для `POST /api/billing/orders` |
-| `development/app/startup.py` | Проверка encryption key при DATABASE_URL |
-| `development/migrations/001_orders.sql` | SQL-миграция таблиц |
+| `development/app/account/` | Регистрация, вход, me, orders, profiles |
+| `development/app/account/passwords.py` | Хеширование паролей (Argon2 через pwdlib) |
+| `development/app/auth.py` | Разделение admin/customer JWT, `get_current_admin`, `get_current_customer` |
+| `development/app/billing/models.py` | Модель `Customer`, `orders.customer_id` |
+| `development/app/billing/router.py` | Customer JWT при создании заказа, email обязателен без входа |
+| `development/app/billing/service.py` | `customer_id`, нормализация email |
+| `development/app/billing/schemas.py` | `customer_email` в публичном ответе заказа |
+| `development/app/billing/database.py` | Запуск всех SQL-миграций по порядку |
+| `development/app/main.py` | Подключение account router, admin deps |
+| `development/migrations/002_customers.sql` | Таблица `customers`, FK `orders.customer_id` |
+| `development/requirements.txt` | `pwdlib[argon2]` |
+| `development/tests/test_account.py` | Тесты кабинета |
+| `development/tests/test_billing.py` | Email в заказах (обязательное поле без JWT) |
 
-### Frontend
+#### Frontend
 | Путь | Назначение |
 |------|------------|
-| `development/frontend/src/pages/BuyPage.tsx` | `/buy` |
-| `development/frontend/src/pages/BuySuccessPage.tsx` | `/buy/success` |
-| `development/frontend/src/pages/BuyFailPage.tsx` | `/buy/fail` |
-| `development/frontend/src/App.tsx` | Роутинг, вкладка «Заказы» |
-| `development/frontend/src/api.ts` | Billing API |
-| `development/frontend/src/styles.css` | Стили покупки и заказов |
+| `development/frontend/src/pages/AccountPage.tsx` | `/account` — профили и история |
+| `development/frontend/src/pages/AccountLoginPage.tsx` | `/account/login` |
+| `development/frontend/src/pages/AccountRegisterPage.tsx` | `/account/register` |
+| `development/frontend/src/components/ConnectionLinks.tsx` | Shared QR/ссылки (из админки) |
+| `development/frontend/src/pages/BuyPage.tsx` | Email обязателен / readonly, ссылки в кабинет |
+| `development/frontend/src/pages/BuySuccessPage.tsx` | CTA регистрации/входа |
+| `development/frontend/src/App.tsx` | Роутинг `/account/*`, рефактор connection links |
+| `development/frontend/src/api.ts` | `customer_token`, `customerApi` |
+| `development/frontend/src/styles.css` | Стили кабинета |
 
-### Инфраструктура
-| Путь | Назначение |
-|------|------------|
-| `development/docker-compose.yml` | Сервис `postgres` + `webtelemt` |
-| `development/.env.example` | Новые переменные |
-| `development/requirements.txt` | sqlalchemy, asyncpg, cryptography |
-| `install.sh` | Генерация ключей, подсказки ЮKassa, `--purge-postgres` |
-| `development/tests/test_billing.py` | Тесты с mock ЮKassa |
+---
+
+## Auth model: admin vs customer JWT
+
+Оба типа токенов подписываются одним `JWT_SECRET`, но различаются payload и проверкой на endpoints.
+
+| | Admin | Customer |
+|---|-------|----------|
+| **Получение** | `POST /api/auth/login` (username + env password) | `POST /api/account/register` или `/login` |
+| **localStorage** | `webtelemt_token` | `customer_token` |
+| **Payload** | `{"sub": "<admin_username>", "exp": ...}` | `{"sub": "<customer_uuid>", "role": "customer", "email": "...", "exp": ...}` |
+| **Admin API** | ✅ (токены без `role` — обратная совместимость) | ❌ 403 |
+| **Customer API** | ❌ 401 | ✅ |
+
+Защита admin endpoints: `get_current_admin` — отклоняет `role: customer` с 403.  
+Защита customer endpoints: `get_current_customer` — принимает только `role: customer`.
+
+---
+
+## Пароли и привязка заказов
+
+### Пароли
+- **Алгоритм:** Argon2 через библиотеку `pwdlib` (`PasswordHash.recommended()`).
+- **Минимум:** 8 символов (валидация на backend и frontend).
+- **Хранение:** только `password_hash` в таблице `customers`; пароли не логируются.
+
+### Привязка заказов
+1. **При покупке с customer JWT:** `POST /api/billing/orders` с заголовком `Authorization: Bearer <customer_token>` → `orders.customer_id` проставляется сразу; email берётся из профиля.
+2. **Без входа:** email обязателен, сохраняется в `orders.customer_email` (lowercase, trim).
+3. **Постфактум:** при регистрации или входе все заказы с тем же `customer_email` (case-insensitive) и `customer_id IS NULL` привязываются к аккаунту (`link_orders_by_email`).
+
+---
 
 ## Как запустить
 
 ### Production (Docker)
 
 ```bash
-# Из корня репозитория
 ./install.sh
-# Заполните YOOKASSA_SHOP_ID и YOOKASSA_SECRET_KEY в development/.env
-# Настройте webhook в личном кабинете ЮKassa:
-#   POST https://<ваш-домен>/api/billing/webhook/yookassa
-```
-
-```bash
+# Заполните YOOKASSA_* в development/.env
 cd development
 docker compose up -d
 ```
 
 - Панель: `http://<ip>:8080`
 - Покупка: `http://<ip>:8080/buy`
-- PostgreSQL: `127.0.0.1:5432` (доступен с хоста; webtelemt подключается через `network_mode: host`)
+- Кабинет: `http://<ip>:8080/account`
+
+При обновлении с фазы 2 миграция `002_customers.sql` применится автоматически при старте backend.
 
 ### Локальная разработка
 
 ```bash
 cd development
-python3 -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+.venv\Scripts\activate          # Linux/macOS: source .venv/bin/activate
 pip install -r requirements-dev.txt
 
-# PostgreSQL (или только postgres из compose)
 docker compose up -d postgres
+cp .env.example .env            # DATABASE_URL, YOOKASSA_*, BILLING_CREDENTIALS_ENCRYPTION_KEY
 
-cp .env.example .env
-# Заполните DATABASE_URL, YOOKASSA_*, BILLING_CREDENTIALS_ENCRYPTION_KEY
-# Fernet: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-
-# Backend
 uvicorn app.main:app --reload --port 8080
 
-# Frontend (отдельный терминал)
 cd frontend
 npm install
 npm run dev
-# Vite proxy или PANEL_CORS_ORIGINS=http://localhost:5173
 ```
 
 ### Тесты
 
 ```bash
 cd development
-.venv/bin/pytest -v   # Windows: .venv\Scripts\pytest -v
+.venv\Scripts\pytest -v         # Linux/macOS: .venv/bin/pytest -v
 ```
 
-Тесты биллинга используют SQLite in-memory и `MockYooKassaClient` — реальные API не вызываются.
+27 тестов: auth, security, billing, account. SQLite in-memory + MockYooKassa.
 
-> **Примечание:** после fix гонки прогнать `pytest -v` локально (в среде агента Python может быть недоступен).
+---
 
-## API endpoints
+## API endpoints (фаза 3)
 
-| Метод | Путь | Auth |
-|-------|------|------|
-| GET | `/api/billing/plan` | — |
-| POST | `/api/billing/orders` | — (rate limit) |
-| GET | `/api/billing/orders/{id}` | — |
-| GET | `/api/billing/orders/{id}/credentials` | — (one-time, 410 при повторе) |
-| POST | `/api/billing/webhook/yookassa` | проверка через API ЮKassa |
-| GET | `/api/billing/orders` | JWT admin |
+| Метод | Путь | Auth | Описание |
+|-------|------|------|----------|
+| POST | `/api/account/register` | — | Регистрация, JWT customer |
+| POST | `/api/account/login` | — | Вход, JWT customer |
+| GET | `/api/account/me` | customer | id, email |
+| GET | `/api/account/orders` | customer | Заказы аккаунта |
+| GET | `/api/account/profiles` | customer | Completed + live Telemt (без secret) |
+| POST | `/api/billing/orders` | опционально customer JWT | Email обязателен без JWT |
 
-## Безопасность secret
+Rate limit на register/login — тот же механизм, что на admin login (`LOGIN_RATE_LIMIT`).
 
-- **At-rest:** secret хранится в `order_secrets.secret_encrypted` (Fernet, ключ `BILLING_CREDENTIALS_ENCRYPTION_KEY`).
-- **One-time reveal:** при первом `GET .../credentials` secret расшифровывается, `credentials_viewed_at` фиксируется, запись в `order_secrets` удаляется.
-- **Админка:** secret не отображается, только флаг `credentials_viewed`.
-- **Логи:** secret и ключи ЮKassa не логируются.
+---
 
-## Webhook ЮKassa
+## Фаза 2 — биллинг (кратко)
 
-При `payment.succeeded` backend:
-1. Запрашивает статус платежа через API ЮKassa (верификация, не только тело webhook).
-2. Сверяет сумму и `metadata.order_id`.
-3. Идемпотентно создаёт пользователя Telemt (повторный webhook не создаёт второго user).
-4. Переводит заказ в `completed`.
+MVP биллинга: `/buy`, ЮKassa, one-time secret, PostgreSQL, админ-вкладка «Заказы».  
+Подробности прежней реализации — в git history и `development/CHANGES.md`.
 
-## Fix: гонка webhook / credentials (code review)
+### Безопасность secret (без изменений)
+- Fernet at-rest, one-time reveal, админка без secret.
+- Кабинет показывает только ссылки подключения и флаг `credentials_viewed`.
 
-**Проблема:** при параллельных webhook или параллельных `GET .../credentials` два запроса могли пройти проверку статуса до commit и создать двух Telemt users или дважды выдать secret.
-
-**Исправление** (`development/app/billing/service.py`):
-- `_load_order(..., for_update=False)` — при `for_update=True` добавляется `SELECT ... FOR UPDATE`.
-- `handle_webhook` — загрузка заказа с `for_update=True`; если уже `completed` — `commit` и return (снятие блокировки).
-- `reveal_credentials` — загрузка заказа с `for_update=True`.
-
-Дополнительно: удалён неиспользуемый импорт `timezone` в `schemas.py`.
-
-## Миграции
-
-При старте приложения выполняется `migrations/001_orders.sql` (PostgreSQL). Для SQLite (тесты) — `Base.metadata.create_all`.
-
-## Известные ограничения
-
-- Один тариф из env, без UI редактирования.
-- Email сохраняется, но не отправляется.
-- Нет личного кабинета покупателя.
-- TTL pending-заказов проверяется при чтении заказа (фоновый cron не реализован).
-- ЮKassa webhook: IP-whitelist не реализован — полагаемся на повторный запрос статуса платежа через API.
-- Биллинг отключён (`503`), если не заданы все переменные ЮKassa + DATABASE_URL + encryption key.
+---
 
 ## Открытые вопросы
 
-- Нужен ли IP-whitelist для webhook ЮKassa в production?
-- URL fail-редиректа: сейчас покупатель попадает на `/buy/success` через `return_url`; для `/buy/fail` настроить в ЮKassa отдельно при необходимости.
+- IP-whitelist для webhook ЮKassa в production?
+- Фоновый cron для TTL pending-заказов?
+- Восстановление пароля / подтверждение email — вне scope фазы 3.

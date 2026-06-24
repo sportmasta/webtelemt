@@ -1,4 +1,5 @@
 const TOKEN_KEY = "webtelemt_token";
+const CUSTOMER_TOKEN_KEY = "customer_token";
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -10,6 +11,18 @@ export function setToken(token: string): void {
 
 export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
+}
+
+export function getCustomerToken(): string | null {
+  return localStorage.getItem(CUSTOMER_TOKEN_KEY);
+}
+
+export function setCustomerToken(token: string): void {
+  localStorage.setItem(CUSTOMER_TOKEN_KEY, token);
+}
+
+export function clearCustomerToken(): void {
+  localStorage.removeItem(CUSTOMER_TOKEN_KEY);
 }
 
 function formatErrorDetail(detail: unknown): string {
@@ -44,6 +57,64 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   };
   if (token) {
     headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch(path, { ...options, headers });
+
+  if (!response.ok) {
+    let detail: unknown = response.statusText;
+    try {
+      const body = await response.json();
+      detail = body.detail ?? detail;
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(formatErrorDetail(detail), response.status);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+  return response.json() as Promise<T>;
+}
+
+async function customerRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = getCustomerToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string>),
+  };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch(path, { ...options, headers });
+
+  if (!response.ok) {
+    let detail: unknown = response.statusText;
+    try {
+      const body = await response.json();
+      detail = body.detail ?? detail;
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(formatErrorDetail(detail), response.status);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+  return response.json() as Promise<T>;
+}
+
+async function billingOrderRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const customerToken = getCustomerToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string>),
+  };
+  if (customerToken) {
+    headers.Authorization = `Bearer ${customerToken}`;
   }
 
   const response = await fetch(path, { ...options, headers });
@@ -232,7 +303,7 @@ export const api = {
   },
 
   createBillingOrder(body: { username?: string; email?: string }) {
-    return request<CreateOrderResponse>("/api/billing/orders", {
+    return billingOrderRequest<CreateOrderResponse>("/api/billing/orders", {
       method: "POST",
       body: JSON.stringify(body),
     });
@@ -253,6 +324,64 @@ export const api = {
   },
 };
 
+export const customerApi = {
+  register(email: string, password: string, password_confirm: string) {
+    return customerRequest<CustomerTokenResponse>("/api/account/register", {
+      method: "POST",
+      body: JSON.stringify({ email, password, password_confirm }),
+    });
+  },
+
+  login(email: string, password: string) {
+    return customerRequest<CustomerTokenResponse>("/api/account/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+  },
+
+  me() {
+    return customerRequest<CustomerMe>("/api/account/me");
+  },
+
+  orders() {
+    return customerRequest<CustomerOrder[]>("/api/account/orders");
+  },
+
+  profiles() {
+    return customerRequest<CustomerProfile[]>("/api/account/profiles");
+  },
+};
+
+export interface CustomerTokenResponse {
+  token: string;
+  email: string;
+}
+
+export interface CustomerMe {
+  id: string;
+  email: string;
+}
+
+export interface CustomerOrder {
+  id: string;
+  status: string;
+  amount_kopecks: number;
+  currency: string;
+  username_issued: string | null;
+  created_at: string;
+  paid_at: string | null;
+  completed_at: string | null;
+}
+
+export interface CustomerProfile {
+  order_id: string;
+  username: string;
+  order_status: string;
+  completed_at: string | null;
+  credentials_viewed: boolean;
+  telemt: TelemtUser | null;
+}
+
 export interface BillingPlan {
   name: string;
   price_rub: number;
@@ -270,6 +399,7 @@ export interface BillingOrderPublic {
   amount_kopecks: number;
   currency: string;
   username_issued: string | null;
+  customer_email: string | null;
   credentials_available: boolean;
   created_at: string;
   paid_at: string | null;

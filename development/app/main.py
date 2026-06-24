@@ -8,12 +8,13 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from app.account.router import router as account_router
 from app.auth import (
     LoginRequest,
     LoginResponse,
     MeResponse,
     create_access_token,
-    get_current_user,
+    get_current_admin,
     verify_credentials,
 )
 from app.billing.database import close_database, init_database, run_migrations
@@ -105,7 +106,7 @@ def create_app() -> FastAPI:
         return LoginResponse(token=token, username=body.username)
 
     @app.get("/api/auth/me", response_model=MeResponse)
-    def me(username: Annotated[str, Depends(get_current_user)]) -> MeResponse:
+    def me(username: Annotated[str, Depends(get_current_admin)]) -> MeResponse:
         return MeResponse(username=username)
 
     @app.get("/api/health")
@@ -114,21 +115,21 @@ def create_app() -> FastAPI:
 
     @app.get("/api/system/info")
     async def system_info(
-        _: Annotated[str, Depends(get_current_user)],
+        _: Annotated[str, Depends(get_current_admin)],
         client: Annotated[TelemtClient, Depends(telemt_client)],
     ) -> Any:
         return await client.get("/v1/system/info")
 
     @app.get("/api/stats/summary")
     async def stats_summary(
-        _: Annotated[str, Depends(get_current_user)],
+        _: Annotated[str, Depends(get_current_admin)],
         client: Annotated[TelemtClient, Depends(telemt_client)],
     ) -> Any:
         return await client.get("/v1/stats/summary")
 
     @app.get("/api/users")
     async def list_users(
-        _: Annotated[str, Depends(get_current_user)],
+        _: Annotated[str, Depends(get_current_admin)],
         client: Annotated[TelemtClient, Depends(telemt_client)],
     ) -> Any:
         return await client.get("/v1/users")
@@ -137,7 +138,7 @@ def create_app() -> FastAPI:
     async def create_user(
         body: CreateUserBody,
         settings: Annotated[Settings, Depends(get_settings)],
-        _: Annotated[str, Depends(get_current_user)],
+        _: Annotated[str, Depends(get_current_admin)],
         client: Annotated[TelemtClient, Depends(telemt_client)],
     ) -> Any:
         return await client.post(
@@ -154,12 +155,13 @@ def create_app() -> FastAPI:
             str,
             Path(min_length=1, max_length=64, pattern=USERNAME_PATTERN),
         ],
-        _: Annotated[str, Depends(get_current_user)],
+        _: Annotated[str, Depends(get_current_admin)],
         client: Annotated[TelemtClient, Depends(telemt_client)],
     ) -> Any:
         return await client.delete(f"/v1/users/{username}")
 
     app.include_router(billing_router)
+    app.include_router(account_router)
     _mount_static(app, settings)
     return app
 

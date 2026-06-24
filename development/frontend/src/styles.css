@@ -737,6 +737,65 @@ input:focus {
   color: var(--danger);
 }
 
+.badge--failed,
+.badge--expired {
+  background: rgba(229, 83, 83, 0.15);
+  color: var(--danger);
+}
+
+.account-profiles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.account-profile-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.account-profile-header {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.account-profile-header:hover,
+.account-profile-header--open {
+  background: var(--bg-hover);
+}
+
+.account-profile-body {
+  padding: 0 1rem 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.account-cta {
+  margin: 1.25rem 0;
+  padding: 1rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+}
+
+.account-cta-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
 @media (max-width: 640px) {
   .page {
     padding: 1rem;

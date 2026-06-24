@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import get_current_user
+from app.auth import CustomerAuth, get_current_admin, get_optional_customer
 from app.billing.database import get_session
 from app.billing.deps import get_billing_service as resolve_billing_service
 from app.billing.schemas import (
@@ -38,6 +38,7 @@ def _order_public(order) -> OrderPublicResponse:
         amount_kopecks=order.amount_kopecks,
         currency=order.currency,
         username_issued=order.username_issued,
+        customer_email=order.customer_email,
         credentials_available=credentials_available,
         created_at=order.created_at,
         paid_at=order.paid_at,
@@ -79,16 +80,27 @@ async def create_order(
     settings: Annotated[Settings, Depends(get_settings)],
     service: Annotated[BillingService, Depends(billing_service_dep)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    customer: Annotated[CustomerAuth | None, Depends(get_optional_customer)] = None,
 ) -> CreateOrderResponse:
     if not settings.billing_enabled:
         raise HTTPException(status_code=503, detail="Оплата временно недоступна")
     ip = client_ip(request)
     check_billing_rate_limit(ip, settings)
+
+    customer_id = None
+    email = str(body.email) if body.email else None
+    if customer is not None:
+        customer_id = customer.id
+        email = customer.email
+    elif not email:
+        raise HTTPException(status_code=400, detail="Укажите email")
+
     try:
         order, confirmation_url = await service.create_order(
             session,
             username=body.username,
-            email=str(body.email) if body.email else None,
+            email=email,
+            customer_id=customer_id,
         )
     except HTTPException:
         record_billing_attempt(ip, settings)
@@ -98,7 +110,7 @@ async def create_order(
 
 @router.get("/orders", response_model=list[OrderAdminResponse])
 async def list_orders_admin(
-    _: Annotated[str, Depends(get_current_user)],
+    _: Annotated[str, Depends(get_current_admin)],
     service: Annotated[BillingService, Depends(billing_service_dep)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> list[OrderAdminResponse]:

@@ -26,6 +26,7 @@ class OrderPublicResponse(BaseModel):
     amount_kopecks: int
     currency: str
     username_issued: str | None
+    customer_email: str | None = None
     credentials_available: bool
     created_at: datetime
     paid_at: datetime | None

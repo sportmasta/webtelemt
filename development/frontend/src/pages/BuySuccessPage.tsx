@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ApiError, api, BillingCredentials, BillingOrderPublic } from "../api";
+import {
+  ApiError,
+  api,
+  BillingCredentials,
+  BillingOrderPublic,
+  getCustomerToken,
+} from "../api";
 
 export default function BuySuccessPage() {
   const [params] = useSearchParams();
@@ -9,6 +15,7 @@ export default function BuySuccessPage() {
   const [credentials, setCredentials] = useState<BillingCredentials | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const customerLoggedIn = Boolean(getCustomerToken());
 
   useEffect(() => {
     if (!orderId) {
@@ -52,6 +59,9 @@ export default function BuySuccessPage() {
     };
   }, [orderId]);
 
+  const showAccountCta =
+    !customerLoggedIn && order?.customer_email && order.status === "completed";
+
   return (
     <div className="page page--center">
       <div className="card card--buy">
@@ -79,6 +89,23 @@ export default function BuySuccessPage() {
           <p className="error">{error || "Данные недоступны"}</p>
         )}
 
+        {showAccountCta && (
+          <div className="account-cta">
+            <p className="hint">
+              Создайте кабинет или войдите по email <strong>{order.customer_email}</strong>, чтобы
+              видеть профиль и ссылки подключения позже.
+            </p>
+            <div className="account-cta-actions">
+              <Link to="/account/register" className="btn btn--primary btn--sm">
+                Создать кабинет
+              </Link>
+              <Link to="/account/login" className="btn btn--sm">
+                Войти
+              </Link>
+            </div>
+          </div>
+        )}
+
         {order && (
           <p className="hint hint--center">
             Заказ <span className="mono">{order.id.slice(0, 8)}…</span> · {order.status}
@@ -88,6 +115,10 @@ export default function BuySuccessPage() {
         <p className="hint hint--center">
           <Link to="/buy" className="link-muted">
             Купить ещё
+          </Link>
+          {" · "}
+          <Link to="/account" className="link-muted">
+            Личный кабинет
           </Link>
         </p>
       </div>

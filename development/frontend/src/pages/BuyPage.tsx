@@ -1,11 +1,12 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ApiError, api, BillingPlan } from "../api";
+import { ApiError, api, BillingPlan, customerApi, getCustomerToken } from "../api";
 
 export default function BuyPage() {
   const [plan, setPlan] = useState<BillingPlan | null>(null);
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
+  const [loggedIn, setLoggedIn] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [planLoading, setPlanLoading] = useState(true);
@@ -20,17 +21,35 @@ export default function BuyPage() {
       .finally(() => setPlanLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (!getCustomerToken()) return;
+    customerApi
+      .me()
+      .then((me) => {
+        setEmail(me.email);
+        setLoggedIn(true);
+      })
+      .catch(() => {
+        setLoggedIn(false);
+      });
+  }, []);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!plan) return;
+    if (!loggedIn && !email.trim()) {
+      setError("Укажите email для привязки заказа к кабинету");
+      return;
+    }
     setError("");
     setLoading(true);
     try {
       const body: { username?: string; email?: string } = {};
       const trimmed = username.trim();
       if (trimmed) body.username = trimmed;
-      const mail = email.trim();
-      if (mail) body.email = mail;
+      if (!loggedIn) {
+        body.email = email.trim();
+      }
       const res = await api.createBillingOrder(body);
       window.location.href = res.confirmation_url;
     } catch (err) {
@@ -70,13 +89,15 @@ export default function BuyPage() {
             />
           </label>
           <label className="field">
-            <span>Email (необязательно)</span>
+            <span>Email{loggedIn ? "" : " (обязательно)"}</span>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               autoComplete="email"
+              readOnly={loggedIn}
+              required={!loggedIn}
             />
           </label>
           {error && <p className="error">{error}</p>}
@@ -89,6 +110,23 @@ export default function BuyPage() {
           </button>
         </form>
 
+        <p className="hint hint--center">
+          {loggedIn ? (
+            <Link to="/account" className="link-muted">
+              Личный кабинет
+            </Link>
+          ) : (
+            <>
+              <Link to="/account/login" className="link-muted">
+                Личный кабинет
+              </Link>
+              {" · "}
+              <Link to="/account/register" className="link-muted">
+                Регистрация
+              </Link>
+            </>
+          )}
+        </p>
         <p className="hint hint--center">
           <Link to="/" className="link-muted">
             Вход для администратора

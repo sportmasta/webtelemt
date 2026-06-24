@@ -63,16 +63,19 @@ class BillingService:
         *,
         username: str | None,
         email: str | None,
+        customer_id: uuid.UUID | None = None,
     ) -> tuple[Order, str]:
         order_id = uuid.uuid4()
         username_requested = username.strip() if username else None
+        normalized_email = email.strip().lower() if email else None
         order = Order(
             id=order_id,
             status=OrderStatus.pending.value,
             amount_kopecks=self._amount_kopecks(),
             currency="RUB",
             username_requested=username_requested,
-            customer_email=email,
+            customer_email=normalized_email,
+            customer_id=customer_id,
         )
         session.add(order)
         await session.flush()

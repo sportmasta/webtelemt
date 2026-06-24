@@ -18,6 +18,17 @@ class OrderStatus(str, enum.Enum):
     expired = "expired"
 
 
+class Customer(Base):
+    __tablename__ = "customers"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    orders: Mapped[list["Order"]] = relationship(back_populates="customer")
+
+
 class Order(Base):
     __tablename__ = "orders"
 
@@ -29,12 +40,16 @@ class Order(Base):
     username_issued: Mapped[str | None] = mapped_column(String(64), nullable=True)
     yookassa_payment_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     customer_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    customer_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("customers.id"), nullable=True, index=True
+    )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     credentials_viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    customer: Mapped["Customer | None"] = relationship(back_populates="orders")
     secret: Mapped["OrderSecret | None"] = relationship(back_populates="order", uselist=False)
 
 

@@ -27,7 +27,7 @@ async def _mock_create_user(self: TelemtClient, method: str, path: str, **kwargs
 def test_create_order_returns_confirmation_url(billing_client: TestClient) -> None:
     response = billing_client.post(
         "/api/billing/orders",
-        json={"username": "buyer1"},
+        json={"username": "buyer1", "email": "buyer1@example.com"},
     )
     assert response.status_code == 200
     data = response.json()
@@ -37,7 +37,10 @@ def test_create_order_returns_confirmation_url(billing_client: TestClient) -> No
 
 
 def test_webhook_completes_order_and_credentials_one_time(billing_client: TestClient) -> None:
-    create = billing_client.post("/api/billing/orders", json={"username": "paid_user"})
+    create = billing_client.post(
+        "/api/billing/orders",
+        json={"username": "paid_user", "email": "paid@example.com"},
+    )
     assert create.status_code == 200
     order_id = create.json()["order_id"]
 
@@ -73,7 +76,10 @@ def test_webhook_completes_order_and_credentials_one_time(billing_client: TestCl
 
 
 def test_webhook_idempotent(billing_client: TestClient) -> None:
-    create = billing_client.post("/api/billing/orders", json={})
+    create = billing_client.post(
+        "/api/billing/orders",
+        json={"email": "idem@example.com"},
+    )
     order_id = create.json()["order_id"]
     mock_yookassa = billing_client.mock_yookassa
     payment_id = next(iter(mock_yookassa.payments))
@@ -98,7 +104,10 @@ def test_webhook_idempotent(billing_client: TestClient) -> None:
 
 
 def test_admin_orders_list_no_secret(billing_client: TestClient, auth_headers: dict[str, str]) -> None:
-    billing_client.post("/api/billing/orders", json={"username": "admin_view"})
+    billing_client.post(
+        "/api/billing/orders",
+        json={"username": "admin_view", "email": "admin_view@example.com"},
+    )
     response = billing_client.get("/api/billing/orders", headers=auth_headers)
     assert response.status_code == 200
     orders = response.json()
