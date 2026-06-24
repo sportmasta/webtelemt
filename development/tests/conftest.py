@@ -1,17 +1,20 @@
+import importlib
 import os
 
 import pytest
 from fastapi.testclient import TestClient
-
-from app.config import get_settings
 
 
 @pytest.fixture
 def test_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PANEL_ADMIN_USER", "admin")
     monkeypatch.setenv("PANEL_ADMIN_PASSWORD", "testpass123")
-    monkeypatch.setenv("JWT_SECRET", "test-jwt-secret-for-pytest")
+    monkeypatch.setenv("JWT_SECRET", "test-jwt-secret-for-pytest-only-32chars!")
     monkeypatch.setenv("TELEMT_API_URL", "http://127.0.0.1:9091")
+    monkeypatch.setenv("PANEL_ENV", "production")
+    monkeypatch.setenv("LOGIN_RATE_LIMIT", "100")
+    from app.config import get_settings
+
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
@@ -19,9 +22,12 @@ def test_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def client(test_env: None) -> TestClient:
-    from app.main import app
+    import app.main as main_module
+    import app.rate_limit as rate_limit
 
-    with TestClient(app) as test_client:
+    rate_limit._attempts.clear()
+    importlib.reload(main_module)
+    with TestClient(main_module.create_app()) as test_client:
         yield test_client
 
 

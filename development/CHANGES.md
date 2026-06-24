@@ -50,6 +50,19 @@
 ### Тесты
 - `test_create_user_sets_max_unique_ips`, `test_delete_user_calls_telemt_api`
 
+## 2026-06-24 — Hardening production
+
+### Backend
+- Отключены `/docs`, `/redoc`, `/openapi.json` в `PANEL_ENV=production`
+- Rate limit на `POST /api/auth/login` (по IP)
+- Security headers (CSP, X-Frame-Options, nosniff, …)
+- Проверка `JWT_SECRET` при старте в production
+- CORS: только явные origins из `PANEL_CORS_ORIGINS`, без `*` и credentials
+- Валидация username при `DELETE /api/users/{username}`
+
+### Тесты
+- `tests/test_security.py`
+
 ## 2026-06-24 — Фильтр клиентов
 
 ### Frontend

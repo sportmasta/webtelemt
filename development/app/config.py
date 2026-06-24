@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +18,28 @@ class Settings(BaseSettings):
     panel_port: int = 8080
     static_dir: Path = Path(__file__).resolve().parent.parent / "static"
     user_max_unique_ips: int = 1
+    panel_env: str = "production"
+    cors_origins: str = ""
+    login_rate_limit: int = 5
+    login_rate_window_seconds: int = 900
+    security_hsts: bool = False
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, value: object) -> str:
+        if value is None:
+            return ""
+        return str(value).strip()
+
+    @property
+    def is_production(self) -> bool:
+        return self.panel_env.lower() == "production"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        if not self.cors_origins:
+            return []
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
 
 @lru_cache
