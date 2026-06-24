@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 60 * 24
     panel_port: int = 8080
     static_dir: Path = Path(__file__).resolve().parent.parent / "static"
+    user_max_unique_ips: int = 1
 
 
 @lru_cache

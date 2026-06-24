@@ -86,11 +86,13 @@ export interface TelemtUser {
   enabled?: boolean;
   status?: string;
   current_connections?: number;
+  active_unique_ips?: number;
   active_unique_ips_list?: string[];
   bytes_up?: number;
   bytes_down?: number;
   total_bytes?: number;
   total_octets?: number;
+  max_unique_ips?: number;
   links?: UserLinks;
 }
 
@@ -137,14 +139,36 @@ export function getPrimaryConnectionLink(user: TelemtUser): string | null {
 }
 
 export interface StatsSummary {
-  total_users?: number;
-  enabled_users?: number;
-  total_connections?: number;
-  total_unique_ips?: number;
-  bytes_up?: number;
-  bytes_down?: number;
   uptime_seconds?: number;
+  connections_total?: number;
+  configured_users?: number;
   [key: string]: unknown;
+}
+
+export interface LiveUserStats {
+  tcpSessions: number;
+  uniqueIps: number;
+  activeUsers: number;
+}
+
+export function aggregateLiveStats(users: TelemtUser[]): LiveUserStats {
+  const uniqueIpSet = new Set<string>();
+  let tcpSessions = 0;
+  let activeUsers = 0;
+
+  for (const user of users) {
+    tcpSessions += user.current_connections ?? 0;
+    if ((user.current_connections ?? 0) > 0) activeUsers += 1;
+    for (const ip of user.active_unique_ips_list ?? []) {
+      uniqueIpSet.add(ip);
+    }
+  }
+
+  return {
+    tcpSessions,
+    uniqueIps: uniqueIpSet.size,
+    activeUsers,
+  };
 }
 
 export const api = {

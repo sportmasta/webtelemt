@@ -30,5 +30,25 @@
 - QR-код для основной ссылки, кнопка «Копировать»
 - Зависимость `qrcode.react`
 
+## 2026-06-24 — Метрики подключений
+
+### Frontend
+- Колонка «Подключения» → «TCP-сессии»
+- Активные IP: жирный счётчик + список адресов
+- Верхние карточки: текущие TCP и уникальные IP из `/v1/users` (не `connections_total`)
+
+## 2026-06-24 — Лимит IP при создании пользователя
+
+### Backend
+- `POST /api/users` передаёт `max_unique_ips: 1` в Telemt API → `[access.user_max_unique_ips]` в telemt.toml
+- Настройка `USER_MAX_UNIQUE_IPS` (default `1`) в `.env`
+- Удаление пользователя через Telemt API убирает запись из конфига вместе с профилем
+
+### Frontend
+- Подсказка в модалке создания, лимит IP в раскрытой карточке пользователя
+
+### Тесты
+- `test_create_user_sets_max_unique_ips`, `test_delete_user_calls_telemt_api`
+
 ### Документация
 - `docs/handoff/02-dev-done.md` — отчёт разработчика

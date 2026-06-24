@@ -82,10 +82,17 @@ async def list_users(
 @app.post("/api/users", status_code=201)
 async def create_user(
     body: CreateUserBody,
+    settings: Annotated[Settings, Depends(get_settings)],
     _: Annotated[str, Depends(get_current_user)],
     client: Annotated[TelemtClient, Depends(telemt_client)],
 ) -> Any:
-    return await client.post("/v1/users", json={"username": body.username})
+    return await client.post(
+        "/v1/users",
+        json={
+            "username": body.username,
+            "max_unique_ips": settings.user_max_unique_ips,
+        },
+    )
 
 
 @app.delete("/api/users/{username}")

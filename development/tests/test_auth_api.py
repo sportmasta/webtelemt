@@ -63,3 +63,30 @@ def test_users_with_token_returns_mocked_data(
     assert len(users) == 1
     assert users[0]["username"] == "alice"
     assert users[0]["current_connections"] == 2
+
+
+async def _mock_create_user_request(self: TelemtClient, method: str, path: str, **kwargs):
+    if method == "POST" and path == "/v1/users":
+        assert kwargs.get("json") == {"username": "bob", "max_unique_ips": 1}
+        return {"user": {"username": "bob", "max_unique_ips": 1}, "secret": "a" * 32}
+    raise AssertionError(f"Unexpected Telemt call: {method} {path}")
+
+
+def test_create_user_sets_max_unique_ips(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    with patch.object(TelemtClient, "request", _mock_create_user_request):
+        response = client.post("/api/users", headers=auth_headers, json={"username": "bob"})
+    assert response.status_code == 201
+
+
+async def _mock_delete_user_request(self: TelemtClient, method: str, path: str, **kwargs):
+    if method == "DELETE" and path == "/v1/users/bob":
+        return {"username": "bob", "in_runtime": False}
+    raise AssertionError(f"Unexpected Telemt call: {method} {path}")
+
+
+def test_delete_user_calls_telemt_api(client: TestClient, auth_headers: dict[str, str]) -> None:
+    with patch.object(TelemtClient, "request", _mock_delete_user_request):
+        response = client.delete("/api/users/bob", headers=auth_headers)
+    assert response.status_code == 200

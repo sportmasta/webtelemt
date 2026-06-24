@@ -4,6 +4,7 @@ import {
   ApiError,
   StatsSummary,
   TelemtUser,
+  aggregateLiveStats,
   api,
   clearToken,
   getConnectionLinks,
@@ -144,6 +145,9 @@ function CreateUserModal({
           </>
         ) : (
           <form onSubmit={handleSubmit} className="form">
+            <p className="hint">
+              Лимит: 1 уникальный IP на профиль ([access.user_max_unique_ips] в telemt.toml).
+            </p>
             <label className="field">
               <span>Имя пользователя</span>
               <input
@@ -205,27 +209,28 @@ function UserRowDetails({ user }: { user: TelemtUser }) {
   const connectionLinks = getConnectionLinks(user);
   const primaryLink = getPrimaryConnectionLink(user);
 
-  if (connectionLinks.length === 0) {
-    return (
-      <div className="user-details">
-        <p className="hint">Ссылка для подключения недоступна (нет данных links в API).</p>
-      </div>
-    );
-  }
-
   return (
     <div className="user-details">
-      <h3 className="user-details-title">Подключение</h3>
-      {primaryLink && (
-        <ConnectionLinkBlock link={primaryLink} label="Основная ссылка (TLS)" />
-      )}
-      {connectionLinks.length > 1 && (
-        <div className="connection-alt-links">
-          <span className="connection-link-label">Дополнительные ссылки</span>
-          {connectionLinks.slice(1).map((link) => (
-            <ConnectionLinkBlock key={link} link={link} />
-          ))}
-        </div>
+      <p className="user-details-meta">
+        Лимит уникальных IP: <strong>{user.max_unique_ips ?? "—"}</strong>
+      </p>
+      {connectionLinks.length === 0 ? (
+        <p className="hint">Ссылка для подключения недоступна (нет данных links в API).</p>
+      ) : (
+        <>
+          <h3 className="user-details-title">Подключение</h3>
+          {primaryLink && (
+            <ConnectionLinkBlock link={primaryLink} label="Основная ссылка (TLS)" />
+          )}
+          {connectionLinks.length > 1 && (
+            <div className="connection-alt-links">
+              <span className="connection-link-label">Дополнительные ссылки</span>
+              {connectionLinks.slice(1).map((link) => (
+                <ConnectionLinkBlock key={link} link={link} />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -324,6 +329,8 @@ function Dashboard({
     return () => clearInterval(id);
   }, [refresh]);
 
+  const liveStats = aggregateLiveStats(users);
+
   return (
     <div className="page">
       <header className="header">
@@ -341,32 +348,30 @@ function Dashboard({
 
       {error && <p className="banner banner--error">{error}</p>}
 
-      {stats && (
+      {(stats || users.length > 0) && (
         <section className="stats-grid">
           <div className="stat-card">
-            <span className="stat-label">Клиентов</span>
-            <span className="stat-value">{stats.total_users ?? users.length}</span>
+            <span className="stat-label">Клиентов в конфиге</span>
+            <span className="stat-value">{stats?.configured_users ?? users.length}</span>
           </div>
           <div className="stat-card">
-            <span className="stat-label">Подключений</span>
-            <span className="stat-value">{stats.total_connections ?? "—"}</span>
+            <span className="stat-label">TCP-сессии (сейчас)</span>
+            <span className="stat-value">{liveStats.tcpSessions}</span>
           </div>
           <div className="stat-card">
             <span className="stat-label">Уникальных IP</span>
-            <span className="stat-value">{stats.total_unique_ips ?? "—"}</span>
+            <span className="stat-value stat-value--emphasis">{liveStats.uniqueIps}</span>
           </div>
           <div className="stat-card">
-            <span className="stat-label">Трафик ↑</span>
-            <span className="stat-value">{formatBytes(stats.bytes_up)}</span>
+            <span className="stat-label">Онлайн (users)</span>
+            <span className="stat-value">{liveStats.activeUsers}</span>
           </div>
-          <div className="stat-card">
-            <span className="stat-label">Трафик ↓</span>
-            <span className="stat-value">{formatBytes(stats.bytes_down)}</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-label">Аптайм</span>
-            <span className="stat-value">{formatUptime(stats.uptime_seconds)}</span>
-          </div>
+          {stats?.uptime_seconds !== undefined && (
+            <div className="stat-card">
+              <span className="stat-label">Аптайм</span>
+              <span className="stat-value">{formatUptime(stats.uptime_seconds)}</span>
+            </div>
+          )}
         </section>
       )}
 
@@ -388,7 +393,7 @@ function Dashboard({
               <tr>
                 <th>Имя</th>
                 <th>Статус</th>
-                <th>Подключения</th>
+                <th>TCP-сессии</th>
                 <th>Активные IP</th>
                 <th>Трафик</th>
                 <th></th>
@@ -425,11 +430,22 @@ function Dashboard({
                             {userStatus(user)}
                           </span>
                         </td>
-                        <td>{user.current_connections ?? 0}</td>
+                        <td className="mono tcp-sessions">{user.current_connections ?? 0}</td>
                         <td className="ips">
-                          {(user.active_unique_ips_list ?? []).length > 0
-                            ? user.active_unique_ips_list!.join(", ")
-                            : "—"}
+                          {(() => {
+                            const ipList = user.active_unique_ips_list ?? [];
+                            const ipCount =
+                              user.active_unique_ips ?? (ipList.length > 0 ? ipList.length : 0);
+                            if (ipCount === 0) return "—";
+                            return (
+                              <span className="ips-cell">
+                                <strong className="ips-count">{ipCount}</strong>
+                                {ipList.length > 0 && (
+                                  <span className="ips-list">{ipList.join(", ")}</span>
+                                )}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="mono">
                           {formatBytes(
@@ -465,7 +481,9 @@ function Dashboard({
             </tbody>
           </table>
         </div>
-        <p className="hint hint--right">Обновление каждые 5 секунд · нажмите на строку для ссылки подключения</p>
+        <p className="hint hint--right">
+          Обновление каждые 5 с · TCP-сессии ≠ устройства · нажмите на строку для ссылки
+        </p>
       </section>
 
       {showCreate && (
