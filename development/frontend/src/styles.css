@@ -287,6 +287,101 @@ input:focus {
   background: var(--bg-hover);
 }
 
+.table-row--clickable {
+  cursor: pointer;
+}
+
+.table-row--clickable.table-row--expanded td {
+  background: var(--bg-hover);
+  border-bottom-color: transparent;
+}
+
+.table-row--details td {
+  background: var(--bg);
+  padding-top: 0;
+  padding-bottom: 1rem;
+}
+
+.table-row--details:hover td {
+  background: var(--bg);
+}
+
+.user-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.row-chevron {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  width: 0.75rem;
+  flex-shrink: 0;
+}
+
+.user-details {
+  padding: 0.75rem 0.75rem 0.25rem;
+  border-top: 1px dashed var(--border);
+}
+
+.user-details-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.connection-link-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.connection-link-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.connection-link-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.connection-link-text {
+  flex: 1;
+  min-width: 200px;
+  display: block;
+  padding: 0.75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  word-break: break-all;
+  color: var(--ok);
+}
+
+.connection-qr {
+  display: inline-flex;
+  padding: 0.75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.connection-alt-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
 .mono {
   font-family: var(--mono);
   font-size: 0.85rem;

@@ -1,10 +1,13 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, Fragment, useCallback, useEffect, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import {
   ApiError,
   StatsSummary,
   TelemtUser,
   api,
   clearToken,
+  getConnectionLinks,
+  getPrimaryConnectionLink,
   getToken,
   setToken,
 } from "./api";
@@ -169,6 +172,65 @@ function CreateUserModal({
   );
 }
 
+function ConnectionLinkBlock({ link, label }: { link: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return (
+    <div className="connection-link-block">
+      {label && <span className="connection-link-label">{label}</span>}
+      <div className="connection-link-row">
+        <code className="connection-link-text">{link}</code>
+        <button type="button" className="btn btn--sm" onClick={handleCopy}>
+          {copied ? "Скопировано" : "Копировать"}
+        </button>
+      </div>
+      <div className="connection-qr">
+        <QRCodeSVG value={link} size={160} bgColor="#1a1d27" fgColor="#e8eaef" />
+      </div>
+    </div>
+  );
+}
+
+function UserRowDetails({ user }: { user: TelemtUser }) {
+  const connectionLinks = getConnectionLinks(user);
+  const primaryLink = getPrimaryConnectionLink(user);
+
+  if (connectionLinks.length === 0) {
+    return (
+      <div className="user-details">
+        <p className="hint">Ссылка для подключения недоступна (нет данных links в API).</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="user-details">
+      <h3 className="user-details-title">Подключение</h3>
+      {primaryLink && (
+        <ConnectionLinkBlock link={primaryLink} label="Основная ссылка (TLS)" />
+      )}
+      {connectionLinks.length > 1 && (
+        <div className="connection-alt-links">
+          <span className="connection-link-label">Дополнительные ссылки</span>
+          {connectionLinks.slice(1).map((link) => (
+            <ConnectionLinkBlock key={link} link={link} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DeleteConfirmModal({
   username,
   onClose,
@@ -231,6 +293,11 @@ function Dashboard({
   const [error, setError] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [expandedUser, setExpandedUser] = useState<string | null>(null);
+
+  const toggleUserRow = (username: string) => {
+    setExpandedUser((current) => (current === username ? null : username));
+  };
 
   const refresh = useCallback(async () => {
     try {
@@ -335,46 +402,70 @@ function Dashboard({
                   </td>
                 </tr>
               ) : (
-                users.map((user) => (
-                  <tr key={user.username}>
-                    <td className="mono">{user.username}</td>
-                    <td>
-                      <span
-                        className={`badge ${
-                          user.enabled !== false ? "badge--ok" : "badge--off"
-                        }`}
+                users.map((user) => {
+                  const isExpanded = expandedUser === user.username;
+                  return (
+                    <Fragment key={user.username}>
+                      <tr
+                        className={`table-row--clickable${isExpanded ? " table-row--expanded" : ""}`}
+                        onClick={() => toggleUserRow(user.username)}
                       >
-                        {userStatus(user)}
-                      </span>
-                    </td>
-                    <td>{user.current_connections ?? 0}</td>
-                    <td className="ips">
-                      {(user.active_unique_ips_list ?? []).length > 0
-                        ? user.active_unique_ips_list!.join(", ")
-                        : "—"}
-                    </td>
-                    <td className="mono">
-                      {formatBytes(
-                        user.total_bytes ??
-                          (user.bytes_up ?? 0) + (user.bytes_down ?? 0)
+                        <td className="mono user-name-cell">
+                          <span className="row-chevron" aria-hidden>
+                            {isExpanded ? "▾" : "▸"}
+                          </span>
+                          {user.username}
+                        </td>
+                        <td>
+                          <span
+                            className={`badge ${
+                              user.enabled !== false ? "badge--ok" : "badge--off"
+                            }`}
+                          >
+                            {userStatus(user)}
+                          </span>
+                        </td>
+                        <td>{user.current_connections ?? 0}</td>
+                        <td className="ips">
+                          {(user.active_unique_ips_list ?? []).length > 0
+                            ? user.active_unique_ips_list!.join(", ")
+                            : "—"}
+                        </td>
+                        <td className="mono">
+                          {formatBytes(
+                            user.total_bytes ??
+                              user.total_octets ??
+                              (user.bytes_up ?? 0) + (user.bytes_down ?? 0)
+                          )}
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="btn btn--danger btn--sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteTarget(user.username);
+                            }}
+                          >
+                            Удалить
+                          </button>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="table-row--details">
+                          <td colSpan={6}>
+                            <UserRowDetails user={user} />
+                          </td>
+                        </tr>
                       )}
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        className="btn btn--danger btn--sm"
-                        onClick={() => setDeleteTarget(user.username)}
-                      >
-                        Удалить
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                    </Fragment>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
-        <p className="hint hint--right">Обновление каждые 5 секунд</p>
+        <p className="hint hint--right">Обновление каждые 5 секунд · нажмите на строку для ссылки подключения</p>
       </section>
 
       {showCreate && (

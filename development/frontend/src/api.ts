@@ -74,6 +74,13 @@ export interface MeResponse {
   username: string;
 }
 
+export interface UserLinks {
+  classic?: string[];
+  secure?: string[];
+  tls?: string[];
+  tls_domains?: { domain: string; link: string }[];
+}
+
 export interface TelemtUser {
   username: string;
   enabled?: boolean;
@@ -83,6 +90,50 @@ export interface TelemtUser {
   bytes_up?: number;
   bytes_down?: number;
   total_bytes?: number;
+  total_octets?: number;
+  links?: UserLinks;
+}
+
+function parseServerFromProxyLink(link: string): string | null {
+  const match = link.match(/[?&]server=([^&]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function isConcreteServer(server: string | null): boolean {
+  return Boolean(server && server !== "::" && server !== "UNKNOWN");
+}
+
+/** Предпочитает TLS-ссылку с реальным IP; иначе первую доступную из tls/classic/secure. */
+export function getConnectionLinks(user: TelemtUser): string[] {
+  const links = user.links;
+  if (!links) return [];
+
+  const collected: string[] = [];
+  const pushUnique = (items?: string[]) => {
+    for (const item of items ?? []) {
+      if (item && !collected.includes(item)) collected.push(item);
+    }
+  };
+
+  if (links.tls?.length) {
+    const preferred = links.tls.filter((link) =>
+      isConcreteServer(parseServerFromProxyLink(link))
+    );
+    pushUnique(preferred.length > 0 ? preferred : links.tls);
+  }
+
+  pushUnique(links.secure);
+  pushUnique(links.classic);
+
+  for (const entry of links.tls_domains ?? []) {
+    if (entry.link && !collected.includes(entry.link)) collected.push(entry.link);
+  }
+
+  return collected;
+}
+
+export function getPrimaryConnectionLink(user: TelemtUser): string | null {
+  return getConnectionLinks(user)[0] ?? null;
 }
 
 export interface StatsSummary {
